@@ -672,7 +672,7 @@ BOOL GetHeader(Class *cl, Object *obj)
 				else strcpy(d->chip_version, SID_CHIP_6581);
 
 				if (count > 1)
-					strcat(d->chip_version, count == 3 ? " x3 (stereo)" : " x2 (stereo)");
+					strcat(d->chip_version, count == 3 ? " \xD73 (stereo)" : " \xD72 (stereo)");
 			}
 
 			build_metadata(d);
