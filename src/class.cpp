@@ -19,6 +19,7 @@
 *   MMA_Audio_Channels         (V1)     [..G.Q], ULONG
 *   MMA_Audio_BitsPerSample    (V1)     [..G.Q], ULONG
 *   MMA_DataFormat             (V1)     [..G.Q], STRPTR
+*   MMA_MetaData               (V1)     [..G.Q], struct MetaItem *
 *   MMA_Audio_SongCount        (V1)     [..G.Q], ULONG
 *   MMA_Audio_StartSong        (V1)     [..G.Q], ULONG
 *   MMA_Audio_SIDVersion       (V1)     [..G.Q], ULONG
@@ -157,6 +158,8 @@
 #define __NOLIBBASE__
 #define SYSTEM_PRIVATE
 
+#include <string.h>
+
 #include <proto/exec.h>
 #include <proto/intuition.h>
 #include <proto/utility.h>
@@ -169,6 +172,7 @@
 #include <clib/debug_protos.h>
 #include <classes/multimedia/multimedia.h>
 #include <classes/multimedia/audio.h>
+#include <classes/multimedia/metadata.h>
 #include <hardware/byteswap.h>
 
 ///
@@ -193,6 +197,9 @@ struct ClassBase
 #define SID_HEADER_V1_SIZE  0x76
 #define SID_HEADER_V2_SIZE  0x7C
 #define SID_META_STR_LEN    32
+
+#define SID_CHIP_6581 "6581"
+#define SID_CHIP_8580 "8580"
 
 struct SIDHeader_v1
 {
@@ -235,6 +242,8 @@ struct ObjData
 	UBYTE  released[SID_META_STR_LEN + 1];
 	UQUAD  data_offset;
 	UQUAD  data_length;
+	struct MetaItem metadata[5];
+	UBYTE  chip_version[16];
 };
 
 # pragma pack(1)
@@ -272,6 +281,29 @@ static void copy_sid_string(UBYTE *dest, UBYTE *src)
 		if (src[i] == 0) break;
 	}
 	dest[i] = 0;
+}
+
+static void build_metadata(struct ObjData *d)
+{
+	d->metadata[0].mi_Id = MMETA_Title;
+	d->metadata[0].mi_Length = strlen(d->name);
+	d->metadata[0].mi_Data = (APTR)d->name;
+
+	d->metadata[1].mi_Id = MMETA_Author;
+	d->metadata[1].mi_Length = strlen(d->author);
+	d->metadata[1].mi_Data = (APTR)d->author;
+
+	d->metadata[2].mi_Id = MMETA_Album;
+	d->metadata[2].mi_Length = strlen(d->released);
+	d->metadata[2].mi_Data = (APTR)d->released;
+
+	d->metadata[3].mi_Id = MMETA_Performer;
+	d->metadata[3].mi_Length = strlen(d->chip_version);
+	d->metadata[3].mi_Data = (APTR)d->chip_version;
+
+	d->metadata[4].mi_Id = 0;
+	d->metadata[4].mi_Length = 0;
+	d->metadata[4].mi_Data = NULL;
 }
 
 static UWORD be2word(UBYTE *p)
@@ -632,6 +664,19 @@ BOOL GetHeader(Class *cl, Object *obj)
 			copy_sid_string(d->author, &hdr_buf[0x36]);
 			copy_sid_string(d->released, &hdr_buf[0x56]);
 
+			{
+				UWORD chip = (d->sid_version >= 2) ? ((d->flags >> 4) & 0x03) : 0;
+				UWORD count = (d->sid_version >= 2) ? ((d->flags & 0x03) + 1) : 1;
+
+				if (chip == 1) strcpy(d->chip_version, SID_CHIP_8580);
+				else strcpy(d->chip_version, SID_CHIP_6581);
+
+				if (count > 1)
+					strcat(d->chip_version, count == 3 ? " x3 (stereo)" : " x2 (stereo)");
+			}
+
+			build_metadata(d);
+
 			if (stream_length > d->data_offset)
 				d->data_length = stream_length - d->data_offset;
 			else
@@ -714,6 +759,7 @@ LONG GetPort(Class *cl, Object *obj, struct mmopGetPort *msg)
 		case MMA_DataFormat:
 		case MMA_ExtraData:
 		case MMA_MediaType:
+		case MMA_MetaData:
 		return DoMethod(obj, OM_GET, msg->Attribute, (ULONG)msg->Storage);
 	}
 	return (DoSuperMethodA(cl, obj, (Msg)msg));
@@ -762,6 +808,10 @@ LONG Get(Class *cl, Object *obj, struct opGet *msg)
 
 		case MMA_Audio_Released:
 			*msg->opg_Storage = (LONG)d->released;
+		return TRUE;
+
+		case MMA_MetaData:
+			*msg->opg_Storage = (LONG)&(d->metadata[0]);
 		return TRUE;
 
 		case MMA_MediaType:
