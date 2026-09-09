@@ -243,7 +243,7 @@ struct ObjData
 	UQUAD  data_offset;
 	UQUAD  data_length;
 	struct MetaItem metadata[5];
-	UBYTE  chip_version[16];
+	UBYTE  chip_version[32];
 };
 
 # pragma pack(1)
@@ -665,10 +665,12 @@ BOOL GetHeader(Class *cl, Object *obj)
 			copy_sid_string(d->released, &hdr_buf[0x56]);
 
 			{
-				UWORD chip = (d->sid_version >= 2) ? ((d->flags >> 4) & 0x03) : 0;
+				UWORD chip = (d->sid_version >= 2) ? ((d->flags >> 2) & 0x03) : 0;
 				UWORD count = (d->sid_version >= 2) ? ((d->flags & 0x03) + 1) : 1;
 
 				if (chip == 1) strcpy(d->chip_version, SID_CHIP_8580);
+				else if (chip == 2) strcpy(d->chip_version, "6581+8580");
+				else if (chip == 3) strcpy(d->chip_version, "unknown");
 				else strcpy(d->chip_version, SID_CHIP_6581);
 
 				if (count > 1)
