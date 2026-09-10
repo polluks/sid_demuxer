@@ -38,22 +38,28 @@ ULONG Recognize(struct DtCodeContext *dcc, ULONG recog_type)
 	struct Library *MultimediaBase = dcc->dcc_MultimediaBase;
 	LONG probability = 0;
 	ULONG sid_signature[2];
+	ULONG peeked;
 
-	if (DoMethod(dcc->dcc_Source, MMM_Peek, dcc->dcc_Port, (ULONG)sid_signature, 8) == 8)
+	peeked = DoMethod(dcc->dcc_Source, MMM_Peek, dcc->dcc_Port, (ULONG)sid_signature, 8);
+
+	if (peeked >= 4)
 	{
 		if ((sid_signature[0] == MAKE_ID('P','S','I','D')) ||
 		    (sid_signature[0] == MAKE_ID('R','S','I','D')))
 		{
-			UWORD version = (sid_signature[1] >> 16) & 0xFFFF;
-			
 			probability += 9500;
 	
 			MLOG(LOG_INFO, "Detected SID signature.");
 
-			if (version >= 1 && version <= 4)
+			if (peeked >= 8)
 			{
-				probability += 500;
-				MLOGV(LOG_INFO, "SID version %d.", version);
+				UWORD version = (sid_signature[1] >> 16) & 0xFFFF;
+
+				if (version >= 1 && version <= 4)
+				{
+					probability += 500;
+					MLOGV(LOG_INFO, "SID version %d.", version);
+				}
 			}
 		}
 	}
